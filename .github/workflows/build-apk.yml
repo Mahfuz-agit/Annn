@@ -1,7 +1,5 @@
 name: Build APK
 
-# Builds the APK from the files already arranged in the repo.
-# Run manually from the Actions tab, or it runs when lib/ or pubspec.yaml change.
 on:
   workflow_dispatch:
   push:
@@ -9,6 +7,7 @@ on:
       - 'lib/**'
       - 'tool/**'
       - 'pubspec.yaml'
+      - '.github/workflows/build-apk.yml'
 
 permissions:
   contents: read
@@ -37,6 +36,16 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Install Android SDK 37
+        run: |
+          set -euo pipefail
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-37"
+
       - name: Generate Android scaffold
         run: |
           set -euo pipefail
@@ -51,7 +60,7 @@ jobs:
           cp -r /tmp/keep/lib lib
           rm -rf test analysis_options.yaml
 
-      - name: Patch Android manifest
+      - name: Patch Android manifest, folder picker, and SDK
         run: python3 tool/patch_android.py
 
       - name: Get packages

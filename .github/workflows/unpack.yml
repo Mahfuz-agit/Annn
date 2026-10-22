@@ -1,0 +1,73 @@
+name: Unpack project zip
+
+# Upload project.zip to the repo root, then this workflow unzips it
+# and arranges the files (lib/, tool/, pubspec.yaml, ...) in the repo.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'project.zip'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unpack-project
+  cancel-in-progress: false
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Look for project.zip
+        id: z
+        run: |
+          if [ -f project.zip ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "project.zip not found. Nothing to do."
+          fi
+
+      - name: Unzip and arrange files
+        if: steps.z.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/unz && mkdir -p /tmp/unz
+          unzip -q project.zip -d /tmp/unz
+
+          SRC=/tmp/unz
+          COUNT=$(find /tmp/unz -mindepth 1 -maxdepth 1 | wc -l)
+          if [ "$COUNT" -eq 1 ]; then
+            ONLY="$(find /tmp/unz -mindepth 1 -maxdepth 1)"
+            if [ -d "$ONLY" ]; then SRC="$ONLY"; fi
+          fi
+
+          rm -rf "$SRC/.github" "$SRC/__MACOSX"
+          test -f "$SRC/pubspec.yaml" || { echo "pubspec.yaml missing in zip"; exit 1; }
+          test -f "$SRC/lib/main.dart" || { echo "lib/main.dart missing in zip"; exit 1; }
+
+          rm -rf lib tool
+          cp -a "$SRC"/. .
+          rm -f project.zip
+
+          echo "Arranged files:"
+          find lib tool -type f | sort
+          ls -la
+
+      - name: Commit and push
+        if: steps.z.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Unpack project.zip [skip ci]"
+            git push
+          fi

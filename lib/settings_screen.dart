@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'app_state.dart';
@@ -7,6 +8,7 @@ import 'sources.dart';
 
 const Color _ink = Color(0xFF2C2C2A);
 const Color _muted = Color(0xFF5F5E5A);
+const MethodChannel _folderPicker = MethodChannel('personal_feed/folder_picker');
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,6 +24,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _url = TextEditingController();
   int? _cacheBytes;
   bool _access = true;
+  bool _pickingFolder = false;
 
   @override
   void initState() {
@@ -66,6 +69,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _loadAccess();
   }
 
+  Future<void> _selectFolder() async {
+    if (_pickingFolder) return;
+    setState(() => _pickingFolder = true);
+    try {
+      final path = await _folderPicker.invokeMethod<String>('pickFolder');
+      if (!mounted || path == null || path.trim().isEmpty) return;
+
+      _folder.text = path;
+      app.setFolderPath(path);
+      app.setFolderEnabled(true);
+
+      final ok = await Sources.requestAccess();
+      app.markDirty();
+      await _loadAccess();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ok
+              ? 'Folder selected: $path'
+              : 'Folder selected. Allow video access to scan its videos.'),
+        ),
+      );
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not select folder: ${e.message ?? e.code}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not select folder: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pickingFolder = false);
+    }
+  }
+
   void _addUrl() {
     final u = _url.text.trim();
     if (!u.startsWith('http')) {
@@ -108,6 +150,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               decoration: const InputDecoration(
                 labelText: 'Folder path',
                 border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _pickingFolder ? null : _selectFolder,
+                icon: _pickingFolder
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.folder_open_rounded),
+                label: Text(_pickingFolder ? 'Opening folder picker…' : 'Select Folder'),
               ),
             ),
           ),

@@ -1,0 +1,68 @@
+name: Build APK
+
+# Builds the APK from the files already arranged in the repo.
+# Run manually from the Actions tab, or it runs when lib/ or pubspec.yaml change.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'lib/**'
+      - 'tool/**'
+      - 'pubspec.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android scaffold
+        run: |
+          set -euo pipefail
+          test -f pubspec.yaml
+          test -f lib/main.dart
+          mkdir -p /tmp/keep
+          cp pubspec.yaml /tmp/keep/pubspec.yaml
+          cp -r lib /tmp/keep/lib
+          flutter create --platforms=android --project-name personal_feed --org com.uxfarm.personalfeed --no-pub .
+          cp /tmp/keep/pubspec.yaml pubspec.yaml
+          rm -rf lib
+          cp -r /tmp/keep/lib lib
+          rm -rf test analysis_options.yaml
+
+      - name: Patch Android manifest
+        run: python3 tool/patch_android.py
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-feed-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error

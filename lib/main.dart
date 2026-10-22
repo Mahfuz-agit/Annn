@@ -39,12 +39,6 @@ class PersonalFeedApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         scaffoldBackgroundColor: Colors.white,
-        pageTransitionsTheme: PageTransitionsTheme(
-          builders: <TargetPlatform, PageTransitionsBuilder>{
-            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          },
-        ),
       ),
       home: const FeedScreen(),
     );
